@@ -105,3 +105,46 @@ export {
   type BrailleNodeState,
   type AccessibleBraille,
 } from './encoding/braille.js';
+
+// Braille-Native Tokenizer (Layer 1)
+export {
+  BrailleTokenizer,
+  brailleTokenizer,
+  createBrailleEmbeddings,
+  VOCAB_SIZE as BRAILLE_VOCAB_SIZE,
+  SPECIAL_TOKENS as BRAILLE_SPECIAL_TOKENS,
+  type BrailleToken,
+  type TokenizedSequence,
+} from './encoding/braille-tokenizer.js';
+
+// Braille Quantization (Layer 2)
+export {
+  quantizeScalar,
+  dequantizeScalar,
+  quantizeTensor,
+  dequantizeTensor,
+  tactileDensityMap,
+  tactileHistogram,
+  modelTactileSummary,
+  quantizationError,
+  createBrailleModelDocument,
+  formatForBrailleDisplay,
+  type QuantFormat,
+  type QuantConfig,
+  type QuantizedTensor,
+  type TensorStats,
+  type BrailleModelDocument,
+} from './encoding/braille-quantization.js';
+
+// Braille Streaming Codec (Layer 3)
+export {
+  BrailleStreamEncoder,
+  createInterleavedStream,
+  formatForDisplay,
+  formatAsAria,
+  compareStreams,
+  type BrailleFrame,
+  type BrailleStream,
+  type StreamMeta,
+  type InterleavedStream,
+} from './encoding/braille-stream.js';
