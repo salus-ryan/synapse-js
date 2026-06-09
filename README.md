@@ -80,7 +80,7 @@ curl -fsSL https://ollama.com/install.sh | sh
 ollama pull qwen2.5:0.5b
 
 # Clone and run
-git clone https://github.com/YOUR_USERNAME/synapse-js.git
+git clone https://github.com/salus-ryan/synapse-js.git
 cd synapse-js
 npm install
 npm run demo
