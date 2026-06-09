@@ -55,9 +55,13 @@ setDefaultProvider(provider);
 // Utility
 // ─────────────────────────────────────────────────────────────────
 
+function ts(): string {
+  return new Date().toISOString();
+}
+
 function separator(title: string) {
   console.log(`\n${'═'.repeat(64)}`);
-  console.log(`  ${title}`);
+  console.log(`  [${ts()}] ${title}`);
   console.log(`${'═'.repeat(64)}\n`);
 }
 
@@ -115,7 +119,7 @@ async function demoRace() {
   await pause(100);
 
   // Display results
-  console.log(`  ⏱  Total time: ${elapsed}ms\n`);
+  console.log(`  [${ts()}] ⏱  Total time: ${elapsed}ms\n`);
   console.log('  ┌─────────────────────────────────────────────────────────┐');
 
   results.forEach((result, i) => {
@@ -133,7 +137,7 @@ async function demoRace() {
   });
 
   console.log('  └─────────────────────────────────────────────────────────┘');
-  console.log(`\n  Winner: ${models[braid.winner()]} (index ${braid.winner()})`);
+  console.log(`\n  [${ts()}] Winner: ${models[braid.winner()]} (index ${braid.winner()})`);
 
   // Cleanup
   braid.dispose();
@@ -203,10 +207,10 @@ async function demoConsensus() {
 
   const consensus = braid.output();
   if (consensus) {
-    console.log(`\n  ✓ Consensus reached!`);
+    console.log(`\n  [${ts()}] ✓ Consensus reached!`);
     console.log(`    Agreed answer: ${JSON.stringify(consensus)}`);
   } else {
-    console.log(`\n  ✗ No consensus reached (models disagreed)`);
+    console.log(`\n  [${ts()}] ✗ No consensus reached (models disagreed)`);
   }
 
   braid.dispose();
@@ -279,7 +283,7 @@ async function demoJudge() {
   await pause(100);
 
   console.log(`  ─────────────────────────────────────`);
-  console.log(`  🏆 Judge selected: ${models[braid.winner()]}`);
+  console.log(`  [${ts()}] 🏆 Judge selected: ${models[braid.winner()]}`);
   
   // Show Braille fingerprints for the outputs
   console.log(`\n  Braille Fingerprints (semantic similarity):`);
@@ -344,7 +348,7 @@ async function demoStreamingRace() {
   await Promise.allSettled(synapses.map(s => s.trigger()));
   const elapsed = Date.now() - startTime;
 
-  console.log(`\n\n  ⏱  All models finished in ${elapsed}ms\n`);
+  console.log(`\n\n  [${ts()}] ⏱  All models finished in ${elapsed}ms\n`);
 
   // Show final results
   console.log('  Final outputs:');
@@ -387,7 +391,7 @@ async function warmup() {
     });
     await synapse.trigger().catch(() => {});
     synapse.dispose();
-    console.log(`    ✓ ${model} ready (${Date.now() - start}ms)`);
+    console.log(`    [${ts()}] ✓ ${model} ready (${Date.now() - start}ms)`);
   });
   await Promise.all(warmups);
   console.log('');

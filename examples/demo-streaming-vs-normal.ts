@@ -37,9 +37,13 @@ const provider = createOpenAIProvider(
 );
 setDefaultProvider(provider);
 
+function ts(): string {
+  return new Date().toISOString();
+}
+
 function separator(title: string) {
   console.log(`\n${'═'.repeat(64)}`);
-  console.log(`  ${title}`);
+  console.log(`  [${ts()}] ${title}`);
   console.log(`${'═'.repeat(64)}\n`);
 }
 
@@ -114,7 +118,7 @@ async function demoDifference() {
   const similarity = fingerprintSimilarity(fp1, fp2);
   const identical = String(streamText).trim() === String(normalText).trim();
 
-  console.log(`\n  Results:`);
+  console.log(`\n  [${ts()}] Results:`);
   console.log(`    Identical text?  ${identical ? '✓ YES' : '✗ NO (different!)'}`);
   console.log(`    Fingerprint sim: ${(similarity * 100).toFixed(1)}%`);
   console.log(`    Stream FP:       ${fp1}`);
@@ -193,7 +197,7 @@ async function demoStreamingRace() {
   const result = await braid.trigger();
   const elapsed = Date.now() - start;
 
-  console.log(`\n\n  ⏱  Race completed in ${elapsed}ms`);
+  console.log(`\n\n  [${ts()}] ⏱  Race completed in ${elapsed}ms`);
   console.log(`  🏆 Winner: ${configs[braid.winner()].label} (index ${braid.winner()})\n`);
 
   // Show all final outputs
@@ -271,7 +275,7 @@ async function demoDualMode() {
   const winnerLabel = braid.winner() === 0 ? 'STREAMING' : 'NON-STREAMING';
   const timingValues = braid.timings();
 
-  console.log(`\n\n  Result in ${elapsed}ms:`);
+  console.log(`\n\n  [${ts()}] Result in ${elapsed}ms:`);
   console.log(`  Winner: ${winnerLabel}\n`);
 
   console.log(`  ┌─── Streaming ─────────────────────────────────────────────┐`);
@@ -353,7 +357,7 @@ async function demoTrials() {
     else diffs++;
 
     const icon = same ? '=' : '≠';
-    console.log(`    Trial ${trial}: stream="${String(sText).slice(0,20).trim()}" ${icon} normal="${String(nText).slice(0,20).trim()}"`);
+    console.log(`    [${ts()}] Trial ${trial}: stream="${String(sText).slice(0,20).trim()}" ${icon} normal="${String(nText).slice(0,20).trim()}"`);
 
     streaming.dispose();
     normal.dispose();
