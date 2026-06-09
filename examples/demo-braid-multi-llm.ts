@@ -93,6 +93,7 @@ async function demoRace() {
       stream: false,
       debounce: 0,
       temperature: 0.3,
+      maxTokens: 100,
     })
   );
 
@@ -161,6 +162,7 @@ async function demoConsensus() {
       stream: false,
       debounce: 0,
       temperature: 0.1,
+      maxTokens: 30,
     })
   );
 
@@ -232,6 +234,7 @@ async function demoJudge() {
       stream: false,
       debounce: 0,
       temperature: 0.7,
+      maxTokens: 80,
     })
   );
 
@@ -316,6 +319,7 @@ async function demoStreamingRace() {
       stream: true,
       debounce: 0,
       temperature: 0.9,
+      maxTokens: 60,
     })
   );
 
@@ -367,6 +371,28 @@ async function demoStreamingRace() {
 // MAIN
 // ═══════════════════════════════════════════════════════════════════
 
+async function warmup() {
+  console.log('\n  Warming up models (first load is slow)...');
+  const warmups = models.map(async (model, i) => {
+    const start = Date.now();
+    const synapse = createSynapse({
+      model,
+      signature: 'x -> y',
+      dependencies: () => ({ x: 'hi' }),
+      autoTrigger: false,
+      stream: false,
+      debounce: 0,
+      maxTokens: 5,
+      temperature: 0,
+    });
+    await synapse.trigger().catch(() => {});
+    synapse.dispose();
+    console.log(`    ✓ ${model} ready (${Date.now() - start}ms)`);
+  });
+  await Promise.all(warmups);
+  console.log('');
+}
+
 async function main() {
   console.log(`
 ╔══════════════════════════════════════════════════════════════════╗
@@ -375,6 +401,8 @@ async function main() {
 ║  Backend: ${USE_OLLAMA ? 'Ollama (local)     ' : 'OpenAI API         '}                            ║
 ║  Models: ${models.join(', ').slice(0, 48).padEnd(48)}   ║
 ╚══════════════════════════════════════════════════════════════════╝`);
+
+  await warmup();
 
   await demoRace();
   await demoConsensus();
