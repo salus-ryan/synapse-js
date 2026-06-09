@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Braille-Native AI — Live Demo</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Skip link for screen readers -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header role="banner">
+    <h1>⣿ Braille-Native AI</h1>
+    <p class="subtitle">Streaming AI inference encoded as 8-dot Braille. Your Braille display renders this natively.</p>
+  </header>
+
+  <main id="main-content" role="main">
+    <!-- Input Section -->
+    <section aria-labelledby="prompt-heading">
+      <h2 id="prompt-heading">Prompt</h2>
+      <form id="prompt-form" role="form" aria-label="AI prompt input">
+        <label for="prompt-input" class="sr-only">Enter your prompt</label>
+        <textarea 
+          id="prompt-input" 
+          rows="3" 
+          placeholder="Ask anything..."
+          aria-describedby="prompt-help"
+        >What is the most interesting thing about the ocean?</textarea>
+        <p id="prompt-help" class="help-text">Press Enter or click Generate to start streaming.</p>
+        <div class="controls">
+          <button type="submit" id="generate-btn">Generate ⣿</button>
+          <button type="button" id="stop-btn" disabled aria-label="Stop generation">Stop ⠀</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Output Section: Plain Text -->
+    <section aria-labelledby="text-heading">
+      <h2 id="text-heading">Response (Plain Text)</h2>
+      <div 
+        id="text-output" 
+        class="output-box"
+        role="log"
+        aria-live="polite"
+        aria-atomic="false"
+        aria-label="AI response in plain text"
+      ></div>
+    </section>
+
+    <!-- Output Section: Braille Content -->
+    <section aria-labelledby="braille-heading">
+      <h2 id="braille-heading">Response (Braille-Encoded)</h2>
+      <p class="channel-description">Content channel: each byte of the response mapped 1:1 to an 8-dot Braille cell.</p>
+      <div 
+        id="braille-output" 
+        class="output-box braille-box"
+        role="log"
+        aria-live="assertive"
+        aria-atomic="false"
+        aria-label="AI response encoded as 8-dot Braille characters"
+      ></div>
+    </section>
+
+    <!-- Output Section: Confidence Track -->
+    <section aria-labelledby="confidence-heading">
+      <h2 id="confidence-heading">Confidence Track</h2>
+      <p class="channel-description">One cell per token. More dots raised = higher model certainty. Sparse cells = uncertainty.</p>
+      <div 
+        id="confidence-output" 
+        class="output-box confidence-box"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        aria-label="Token confidence encoded as Braille dot density"
+      ></div>
+    </section>
+
+    <!-- Stats -->
+    <section aria-labelledby="stats-heading">
+      <h2 id="stats-heading">Stream Statistics</h2>
+      <dl id="stats" aria-label="Generation statistics">
+        <dt>Tokens</dt><dd id="stat-tokens">—</dd>
+        <dt>Avg Confidence</dt><dd id="stat-confidence">—</dd>
+        <dt>Duration</dt><dd id="stat-duration">—</dd>
+        <dt>Status</dt><dd id="stat-status">Idle</dd>
+      </dl>
+    </section>
+
+    <!-- About -->
+    <section aria-labelledby="about-heading">
+      <h2 id="about-heading">About This Demo</h2>
+      <p>
+        This page streams AI model output through a Braille-native codec. 
+        The <strong>Braille-Encoded</strong> section contains Unicode Braille characters (U+2800–U+28FF) 
+        that your refreshable Braille display will render as physical dot patterns.
+      </p>
+      <p>
+        The <strong>Confidence Track</strong> shows one Braille cell per token where 
+        dot density represents model certainty: ⣿ = very confident, ⠀ = very uncertain.
+        If you feel the cells becoming sparser, the model is less sure of what it's saying.
+      </p>
+      <p>
+        <strong>For researchers:</strong> This is part of the 
+        <a href="https://github.com/salus-ryan/synapse-js">Synapse.js</a> 
+        Braille-native AI project. We're looking for Braille display users 
+        to validate the tactile experience. Contact us if interested.
+      </p>
+    </section>
+  </main>
+
+  <footer role="contentinfo">
+    <p>Synapse.js — Braille-Native AI Stack — MIT License</p>
+  </footer>
+
+  <script>
+    const form = document.getElementById('prompt-form');
+    const input = document.getElementById('prompt-input');
+    const generateBtn = document.getElementById('generate-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const textOutput = document.getElementById('text-output');
+    const brailleOutput = document.getElementById('braille-output');
+    const confidenceOutput = document.getElementById('confidence-output');
+    const statTokens = document.getElementById('stat-tokens');
+    const statConfidence = document.getElementById('stat-confidence');
+    const statDuration = document.getElementById('stat-duration');
+    const statStatus = document.getElementById('stat-status');
+
+    let abortController = null;
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await startGeneration();
+    });
+
+    stopBtn.addEventListener('click', () => {
+      if (abortController) {
+        abortController.abort();
+        statStatus.textContent = 'Stopped';
+      }
+    });
+
+    async function startGeneration() {
+      const prompt = input.value.trim();
+      if (!prompt) return;
+
+      // Reset
+      textOutput.textContent = '';
+      brailleOutput.textContent = '';
+      confidenceOutput.textContent = '';
+      statTokens.textContent = '0';
+      statConfidence.textContent = '—';
+      statDuration.textContent = '—';
+      statStatus.textContent = 'Streaming...';
+
+      generateBtn.disabled = true;
+      stopBtn.disabled = false;
+
+      abortController = new AbortController();
+      const startTime = Date.now();
+      let tokenCount = 0;
+      let confSum = 0;
+
+      try {
+        const url = `/api/stream?prompt=${encodeURIComponent(prompt)}&max_tokens=150`;
+        const response = await fetch(url, { signal: abortController.signal });
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === 'token') {
+              textOutput.textContent += data.text;
+              brailleOutput.textContent += data.braille;
+              confidenceOutput.textContent += data.confidence;
+              tokenCount++;
+              confSum += data.confidenceValue;
+
+              statTokens.textContent = String(tokenCount);
+              statConfidence.textContent = ((confSum / tokenCount) * 100).toFixed(0) + '%';
+              statDuration.textContent = ((Date.now() - startTime) / 1000).toFixed(1) + 's';
+            } else if (data.type === 'done') {
+              statStatus.textContent = 'Complete';
+              statTokens.textContent = String(data.totalTokens);
+              statConfidence.textContent = (data.avgConfidence * 100).toFixed(0) + '%';
+              statDuration.textContent = (data.duration / 1000).toFixed(1) + 's';
+            } else if (data.type === 'error') {
+              statStatus.textContent = 'Error: ' + data.message;
+            }
+          }
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          statStatus.textContent = 'Error: ' + err.message;
+        }
+      }
+
+      generateBtn.disabled = false;
+      stopBtn.disabled = true;
+      abortController = null;
+    }
+  </script>
+</body>
+</html>
