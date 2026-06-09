@@ -22,7 +22,7 @@ import { SynapseInstance } from './synapse.js';
 
 // --- Types ---
 
-export type BraidStrategy = 'race' | 'consensus' | 'fallback' | 'judge';
+export type BraidStrategy = 'race' | 'consensus' | 'fallback' | 'judge' | 'streaming_race';
 
 export interface BraidConfig<TOutput = any> {
   /** How to resolve multiple outputs */
@@ -37,6 +37,8 @@ export interface BraidConfig<TOutput = any> {
   equals?: (a: TOutput, b: TOutput) => boolean;
   /** Timeout in ms for race strategy (default: 30000) */
   timeout?: number;
+  /** For 'streaming_race': resolve when stream is complete (state goes from streaming to resolved) */
+  resolveOnStreamEnd?: boolean;
 }
 
 export interface BraidInstance<TOutput = any> {
@@ -48,8 +50,14 @@ export interface BraidInstance<TOutput = any> {
   allOutputs: ReadonlySignal<Array<{ output: TOutput | undefined; index: number; valid: boolean }>>;
   /** Whether the braid is still resolving (reactive) */
   resolving: ReadonlySignal<boolean>;
+  /** Per-synapse stream signals (for streaming_race) */
+  streams: ReadonlySignal<string>[];
+  /** Timing info: when each synapse resolved (ms from trigger) */
+  timings: ReadonlySignal<number[]>;
   /** Strategy used */
   strategy: BraidStrategy;
+  /** Trigger all synapses and race them. Returns the winning output. */
+  trigger: () => Promise<TOutput>;
   /** Dispose the braid */
   dispose: () => void;
 }
@@ -83,6 +91,8 @@ export function createBraid<TOutput = any>(
   const [allOutputs, setAllOutputs] = createSignal<
     Array<{ output: TOutput | undefined; index: number; valid: boolean }>
   >([]);
+  const [timings, setTimings] = createSignal<number[]>(synapses.map(() => -1));
+  let triggerTime = 0;
 
   const disposers: Array<() => void> = [];
 
@@ -108,6 +118,9 @@ export function createBraid<TOutput = any>(
       break;
     case 'judge':
       implementJudge();
+      break;
+    case 'streaming_race':
+      implementStreamingRace();
       break;
   }
 
@@ -256,6 +269,54 @@ export function createBraid<TOutput = any>(
     });
   }
 
+  function implementStreamingRace(): void {
+    // Resolves as soon as the first synapse transitions from streaming → resolved
+    synapses.forEach((synapse, index) => {
+      let wasStreaming = false;
+
+      const dispose = createEffect(() => {
+        const state = synapse.state();
+
+        if (state.streaming) {
+          wasStreaming = true;
+        }
+
+        // Resolve when: was streaming and now has a value (no longer streaming/loading)
+        // OR: never streamed but resolved directly
+        const isDone = !state.loading && !state.streaming && state.value !== undefined;
+
+        if (isDone && (wasStreaming || state.value !== undefined)) {
+          const out = synapse.output.peek();
+          if (out !== undefined && validator(out)) {
+            // Record timing
+            if (triggerTime > 0) {
+              const t = [...timings.peek()];
+              t[index] = Date.now() - triggerTime;
+              setTimings(t as any);
+            }
+            resolve(out, index);
+          }
+        }
+      });
+      disposers.push(dispose);
+    });
+
+    // Timeout
+    const timer = setTimeout(() => {
+      if (resolving.peek()) {
+        for (let i = 0; i < synapses.length; i++) {
+          const out = synapses[i].output.peek();
+          if (out !== undefined) {
+            resolve(out, i);
+            return;
+          }
+        }
+        setResolving(false);
+      }
+    }, timeout);
+    disposers.push(() => clearTimeout(timer));
+  }
+
   function updateAllOutputs(): void {
     const all = synapses.map((synapse, index) => {
       const out = synapse.output.peek();
@@ -273,12 +334,43 @@ export function createBraid<TOutput = any>(
     disposers.length = 0;
   }
 
+  async function trigger(): Promise<TOutput> {
+    // Reset state
+    batch(() => {
+      setOutput(undefined as any);
+      setWinner(-1);
+      setResolving(true);
+      setTimings(synapses.map(() => -1) as any);
+    });
+    triggerTime = Date.now();
+
+    // Fire all synapses simultaneously
+    const results = await Promise.allSettled(synapses.map(s => s.trigger()));
+
+    // Record timings for any that didn't already get recorded
+    const t = [...timings.peek()];
+    results.forEach((r, i) => {
+      if (t[i] === -1 && r.status === 'fulfilled') {
+        t[i] = Date.now() - triggerTime;
+      }
+    });
+    setTimings(t as any);
+
+    // Wait a tick for reactive effects to settle
+    await new Promise(r => setTimeout(r, 10));
+
+    return output.peek() as TOutput;
+  }
+
   return {
     output: output as ReadonlySignal<TOutput | undefined>,
     winner: winner as ReadonlySignal<number>,
     allOutputs: allOutputs as ReadonlySignal<Array<{ output: TOutput | undefined; index: number; valid: boolean }>>,
     resolving: resolving as ReadonlySignal<boolean>,
+    streams: synapses.map(s => s.stream),
+    timings: timings as ReadonlySignal<number[]>,
     strategy: config.strategy,
+    trigger,
     dispose,
   };
 }

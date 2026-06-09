@@ -20,6 +20,7 @@
     "demo": "npx tsx examples/demo-ollama.ts",
     "demo:braid": "npx tsx examples/demo-braid-multi-llm.ts",
     "demo:braille": "npx tsx examples/demo-braille.ts",
+    "demo:stream": "npx tsx examples/demo-streaming-vs-normal.ts",
     "example:basic": "npx tsx examples/basic.ts",
     "example:agent": "npx tsx examples/agent.ts"
   },
