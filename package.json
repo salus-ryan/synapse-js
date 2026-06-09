@@ -1,0 +1,55 @@
+{
+  "name": "synapse-js",
+  "version": "0.2.0",
+  "description": "An AI-native reactive framework. Treat AI inference as reactive signals — compose, braid, and stream LLM calls with fine-grained reactivity.",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "npx tsx tests/run-tests.ts",
+    "test:jest": "node --experimental-vm-modules node_modules/.bin/jest",
+    "dev": "tsup --watch",
+    "demo": "npx tsx examples/demo-ollama.ts",
+    "demo:braid": "npx tsx examples/demo-braid-multi-llm.ts",
+    "demo:braille": "npx tsx examples/demo-braille.ts",
+    "example:basic": "npx tsx examples/basic.ts",
+    "example:agent": "npx tsx examples/agent.ts"
+  },
+  "keywords": [
+    "ai",
+    "reactive",
+    "signals",
+    "llm",
+    "framework",
+    "streaming",
+    "braid",
+    "fine-grained-reactivity",
+    "ai-native",
+    "agents",
+    "accessible",
+    "braille"
+  ],
+  "author": "Synapse Contributors",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
