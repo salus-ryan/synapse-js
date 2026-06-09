@@ -112,7 +112,7 @@ export function quantizeScalar(
       break;
     case 'symmetric':
       // Symmetric around zero (no zero-point)
-      quantized = Math.round(value / scale * 127 + 128);
+      quantized = Math.round(value / scale + 128);
       break;
     case 'geometric':
       // Dot density proportional to magnitude
@@ -146,7 +146,7 @@ export function dequantizeScalar(
       const sign = centered >= 0 ? 1 : -1;
       return sign * (Math.expm1(Math.abs(centered)) * scale);
     case 'symmetric':
-      return ((byte - 128) / 127) * scale;
+      return (byte - 128) * scale;
     case 'geometric':
       const dots = byteToDensity(byte);
       return (dots / 8) * scale;

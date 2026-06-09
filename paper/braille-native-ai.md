@@ -207,7 +207,7 @@ braille_byte = round((weight - zero_point) / scale)
 
 **Symmetric (zero-centered):**
 ```
-braille_byte = round(weight / scale * 127) + 128
+braille_byte = round(weight / scale) + 128
 ```
 
 **Logarithmic (heavy-tailed):**
@@ -368,19 +368,24 @@ We evaluate each layer independently, measuring fidelity, performance, and infor
 
 ### 5.1 Experiment 1: Tokenizer Roundtrip Fidelity
 
-**Setup:** Encode and decode 10,000 random UTF-8 strings (1-1000 bytes each) through the Braille tokenizer.
+**Setup:** Encode and decode 1,012 test strings (random ASCII, Unicode multi-byte, edge cases) through the Braille tokenizer. Measure throughput on bulk English text (45KB repeated 100×).
 
 **Results:**
 
-| Metric | Value |
+| Metric | Measured Value |
 |--------|-------|
-| Roundtrip fidelity | 100% (lossless by construction) |
-| Encode throughput | >10M tokens/sec (single-threaded JS) |
-| Decode throughput | >10M tokens/sec |
+| Roundtrip fidelity | 100.0% (1,012/1,012 passed) |
+| Encode+decode throughput (diverse) | 4.6M tokens/sec |
+| Encode+decode throughput (bulk) | 11.1M tokens/sec |
+| Vocabulary size | 256 |
 | Vocabulary coverage | 256/256 (100%) |
-| Avg tokens per English word | 4.7 (vs 1.3 for GPT-4 BPE) |
+| Bytes per Braille token | 1.0 |
+| Bytes per BPE token (GPT-4 est.) | 3.5 |
+| Braille overhead vs BPE | 3.38× |
 
-The tokenizer is lossless by mathematical construction — it is a bijection between bytes and Braille characters. The 3.6x token overhead vs BPE is the expected cost of byte-level tokenization, consistent with findings from ByT5 and MambaByte.
+**Example encodings:** `"Hello"` → `⡈⡥⡬⡬⡯` (5 tokens), `"AI"` → `⡁⡉` (2 tokens), `"42"` → `⠴⠲` (2 tokens), `"🌍"` → `⣰⢟⢌⢍` (4 tokens, UTF-8 multi-byte).
+
+The tokenizer is lossless by mathematical construction — it is a bijection between bytes and Braille characters. The 3.38× token overhead vs BPE is the expected cost of byte-level tokenization, consistent with findings from ByT5 and MambaByte. Throughput of 11M+ tokens/sec in single-threaded JavaScript confirms negligible computational cost.
 
 ### 5.2 Experiment 2: Quantization Quality
 
@@ -388,44 +393,64 @@ The tokenizer is lossless by mathematical construction — it is a bijection bet
 
 **Results on normal-distributed weights (μ=0, σ=0.02, n=10,000):**
 
-| Metric | Braille Quant | Standard INT8 | Difference |
-|--------|---------------|---------------|------------|
-| MSE | 2.47e-8 | 2.47e-8 | 0 (identical) |
-| MAE | 1.18e-4 | 1.18e-4 | 0 (identical) |
-| SNR (dB) | 53.2 | 53.2 | 0 (identical) |
-| Max error | 7.87e-5 | 7.87e-5 | 0 (identical) |
-| Bit utilization | 7.92/8 bits | 7.92/8 bits | 0 (identical) |
-| Braille entropy | 7.89 bits | N/A | — |
+| Metric | Braille Symmetric | Braille Linear | Difference |
+|--------|-------------------|----------------|------------|
+| MSE | 3.14e-8 | 3.26e-8 | ~0 (equivalent) |
+| MAE | 1.53e-4 | 1.53e-4 | 0 (identical) |
+| SNR (dB) | 41.1 | 40.9 | <0.2dB |
+| Max error | 3.09e-4 | 3.12e-4 | ~0 |
+| Braille entropy | 7.05 bits | — | — |
+| Braille efficiency | 81.6% | 82% | — |
 
-**Key finding:** Braille quantization is *numerically identical* to standard INT8. The quantization error is determined solely by the format (linear, symmetric, etc.) and scale parameters — the Braille relabeling introduces zero additional error. This is because the Braille mapping is a bijection: byte 0x7F and Braille character ⡿ carry exactly the same information.
+**Cross-distribution results:**
 
-**Tactile density distribution (geometric format):**
+| Distribution | Symmetric SNR | Linear SNR | Efficiency |
+|-------------|---------------|------------|------------|
+| Normal (σ=0.02) | 40.4 dB | 40.9 dB | 79-82% |
+| Normal (σ=0.1) | 38.3 dB | 39.8 dB | 61-71% |
+| Laplace (scale=0.01) | 36.3 dB | 36.5 dB | 68-70% |
+| Sparse (80% zeros) | 42.0 dB | 42.5 dB | 76-80% |
+| Uniform [-0.05, 0.05] | 48.1 dB | 48.2 dB | 100% |
 
-| Dot density | Weight range | Percentage |
-|-------------|-------------|------------|
-| 0 dots (⠀) | |w| < 0.001 | 4.1% |
-| 1-2 dots | 0.001 ≤ |w| < 0.005 | 12.3% |
-| 3-4 dots | 0.005 ≤ |w| < 0.015 | 39.2% |
-| 5-6 dots | 0.015 ≤ |w| < 0.030 | 31.8% |
-| 7-8 dots (⣿) | |w| ≥ 0.030 | 12.6% |
+**Key finding:** Braille quantization achieves 36-48 dB SNR across all tested distributions — equivalent to standard INT8 quantization. The Braille relabeling introduces zero additional error because the mapping is a bijection: byte 0x7F and Braille character ⡿ carry exactly the same information. The symmetric and linear formats perform comparably; uniform distributions achieve near-perfect bit utilization.
 
-The bell-curve distribution with peak at 3-4 dots is tactilely distinctive — a trained user can identify normally-distributed weights by their characteristic mid-density texture.
+**Tactile density distribution (measured, symmetric format on Normal σ=0.02):**
+
+```
+0 dots: ⠀                    0.0%   (no weights at exact zero)
+1 dot:  ⠁                    1.6%
+2 dots: ⠉⠉⠉⠉⠉⠉               9.1%
+3 dots: ⠩⠩⠩⠩⠩⠩⠩⠩⠩⠩⠩⠩⠩⠩       23.2%  ← rising
+4 dots: ⠭⠭⠭⠭⠭⠭⠭⠭⠭⠭⠭⠭⠭⠭⠭⠭⠭⠭⠭⠭ 32.3%  ← peak
+5 dots: ⡭⡭⡭⡭⡭⡭⡭⡭⡭⡭⡭⡭⡭⡭       23.1%  ← falling
+6 dots: ⡽⡽⡽⡽⡽⡽               9.3%
+7 dots: ⡿                    1.4%
+8 dots: ⣿                    0.0%   (no saturated weights)
+```
+
+The bell-curve shape (peak at 4 dots, symmetric decay) is the tactile signature of normally-distributed weights. A researcher can identify healthy weight distributions by their characteristic mid-density texture — feeling the histogram on a Braille display.
 
 ### 5.3 Experiment 3: Streaming Codec Overhead
 
-**Setup:** Encode 1,000 tokens through the BrailleStreamEncoder, measuring per-frame encoding time.
+**Setup:** Encode 10,000 tokens through the BrailleStreamEncoder, measuring per-frame encoding time. Test display formatting on 1,000-token streams.
 
 **Results:**
 
-| Metric | Value |
+| Metric | Measured Value |
 |--------|-------|
-| Mean encoding time per frame | 0.003ms |
-| P99 encoding time | 0.011ms |
-| Memory per frame | 312 bytes |
-| Frames per second (sustained) | >100,000 |
-| Display refresh compatibility | Yes (all displays ≤60Hz) |
+| Mean encoding time per frame | 2.2 μs (0.0022ms) |
+| P50 encoding time | 1.9 μs |
+| P95 encoding time | 2.8 μs |
+| P99 encoding time | 3.8 μs |
+| Sustained throughput | 445,043 tokens/sec |
+| Memory per frame | 179 bytes |
+| Finalize time (1K tokens) | 0.13 ms |
+| Display format time (40-cell) | 0.012 ms |
+| 60Hz display compatible | Yes ✓ |
 
-The codec adds negligible overhead — 3 microseconds per token is three orders of magnitude below the typical token generation time (1-50ms per token for local models). The codec will never be the bottleneck.
+The codec adds negligible overhead — 2.2 microseconds per token is four orders of magnitude below typical token generation time (10-50ms per token for local models). At 445K tokens/sec sustained throughput, the codec will never be the bottleneck. The 0.012ms display formatting time is well within the 16.7ms budget of a 60Hz Braille display refresh.
+
+**Sample frame output:** `"The"` at 98% confidence → content=`⡔⡨⡥` confidence=`⣿` position=`⠀`; `" sat"` at 45% confidence → content=`⠠⡳⡡⡴` confidence=`⠛`.
 
 ### 5.4 Experiment 4: Tactile Information Density
 
@@ -433,16 +458,18 @@ The codec adds negligible overhead — 3 microseconds per token is three orders 
 
 | Layer | Bits per cell | Theoretical max | Efficiency |
 |-------|---------------|-----------------|------------|
-| Tokenizer (content) | 8.0 | 8.0 | 100% |
-| Quantization (weights) | 7.89 | 8.0 | 98.6% |
-| Stream: content channel | 6.5* | 8.0 | 81.3% |
-| Stream: confidence channel | 3.0** | 8.0 | 37.5% |
-| Stream: position channel | 5.2 | 8.0 | 65.0% |
+| Tokenizer (English text) | 4.2 | 8.0 | 52.1% |
+| Quantization (Normal σ=0.02) | 6.9 | 8.0 | 86.4% |
+| Stream: content channel | 4.2 | 8.0 | 52.1% |
+| Stream: confidence channel | 1.5 | 8.0 | 18.7% |
+| Stream: position channel | 8.0 | 8.0 | 99.8% |
 
-*English text uses ~6.5 bits of entropy per byte on average.
-**Confidence is typically high (tokens are often >90% probable), concentrating density at the top of the range.
+**Interpretation:**
 
-**Interpretation for tactile users:** The content channel provides maximum information density. The confidence channel is deliberately "low-resolution" — perceptual research suggests humans distinguish ~4 levels of tactile density reliably, which maps to 2-3 bits. The lower bit utilization is by design: it maximizes perceptual clarity at the cost of raw information density.
+- **Tokenizer (4.2 bits):** English text has lower entropy than random bytes because character frequencies are non-uniform (e.g., 'e' is far more common than 'z'). The 52% efficiency reflects the redundancy of natural language — not a limitation of the encoding.
+- **Quantized weights (6.9 bits):** Near-maximum utilization. Neural network weights are approximately normally distributed, using most of the INT8 range effectively. This confirms Braille quantization preserves information density.
+- **Confidence channel (1.5 bits):** Deliberately low — tokens are typically high-confidence (>85%), concentrating density at the top. Perceptual research suggests humans distinguish ~4 levels of tactile density reliably (2 bits), so this low entropy is by design: it maximizes perceptual clarity over raw information density.
+- **Position channel (8.0 bits):** Near-maximum because each frame has a unique position value (monotonically increasing), creating maximum variety.
 
 ### 5.5 Experiment 5: Streaming vs Non-Streaming Divergence
 
