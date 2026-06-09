@@ -523,7 +523,31 @@ This has a philosophical implication: when accessibility is the encoding (not a 
 - Auto-scrolling follows generation (like a text terminal)
 - Multi-line displays (Canute 360: 9 lines × 40 cells) can show interleaved streams
 
-### 6.3 Limitations
+### 6.3 Indirect Technical Advantages of Accessible-by-Default
+
+Beyond the direct accessibility benefit, the Braille-native architecture yields several indirect technical advantages that apply even when no Braille display is present:
+
+**1. Tokenizer-free robustness.** BPE tokenizers are a persistent source of bugs and surprising behavior in LLMs: token boundary artifacts, inconsistent handling of whitespace, catastrophic behavior on novel character sequences, and language-dependent performance disparities. A byte-level vocabulary eliminates the entire tokenizer attack surface. Every input is valid; no input can produce an out-of-vocabulary token. This directly improves robustness on code, multilingual text, and adversarial inputs.
+
+**2. Universal multilinguality.** BPE tokenizers allocate vocabulary capacity unevenly across languages — English text gets 3-4 bytes/token while CJK or Arabic may get 8-12 bytes/token, creating a de facto "language tax." A byte-level tokenizer treats all UTF-8 uniformly: Japanese and English have the same cost-per-byte. The 3.38× overhead applies equally to all languages, eliminating structural bias.
+
+**3. Inspectability and debuggability.** The model-as-document property of Braille quantization is useful even for sighted researchers. A quantized model stored as Unicode text can be:
+- `grep`'d for patterns (find saturated layers: `grep -c '⣿' layer_*.braille`)
+- Diffed between checkpoints (standard `diff` shows which weights changed)
+- Visualized without specialized tools (any text editor renders Braille dot patterns)
+- Version-controlled in Git (meaningful diffs, not binary blobs)
+
+This represents a shift from opaque binary formats to transparent, tool-friendly representations.
+
+**4. Streaming as a first-class primitive.** By encoding confidence alongside content, the Braille streaming codec makes uncertainty a visible/tangible signal. This has value for all users: sighted UIs could render confidence as background color intensity, haptic devices could modulate vibration, and automated systems could use per-token confidence for early stopping or branching. The Braille codec is the general case; visual confidence highlighting is a special case.
+
+**5. Compression-free transmission.** A Braille-encoded model is valid UTF-8 text. It can traverse any text channel without base64 encoding, escaping, or binary framing: JSON fields, HTTP bodies, WebSocket messages, clipboard, email, even SMS. The encoding IS the transport format. This simplifies deployment pipelines and eliminates an entire class of serialization bugs.
+
+**6. Intrinsic interpretability.** When each token has a fixed, known meaning (byte value = dot pattern = spatial position), the embedding space has a natural coordinate system from initialization. Early dimensions encode physical dot positions; later dimensions encode semantic content. This geometric initialization may provide better loss landscapes for fine-tuning compared to random initialization — a testable hypothesis for future work.
+
+In summary: designing for accessibility as a first-class constraint produces a system that is also more robust, more debuggable, more portable, and more interpretable than the conventional alternative. Accessibility is not merely a moral good — it is an architectural forcing function that eliminates entire categories of technical debt.
+
+### 6.4 Limitations
 
 1. **No user study.** We have not validated the tactile experience with blind Braille display users. The perceptual claims about dot density and confidence textures are theoretical.
 2. **Byte-level models lag BPE.** Current byte-level models are smaller and less capable than BPE-based frontier models. The gap is closing but not closed.
@@ -531,7 +555,7 @@ This has a philosophical implication: when accessibility is the encoding (not a 
 4. **Single-character Braille.** We use individual Braille characters only. Grade 2 Braille contractions (multi-cell symbols representing common words) are not supported — this would require a separate contraction layer.
 5. **Quantization is post-hoc.** True Braille-native training (where gradients flow through quantized Braille representations) is future work.
 
-### 6.4 Broader Impact
+### 6.5 Broader Impact
 
 If Braille-native AI were adopted, it could:
 - Reduce the latency experienced by Braille display users (eliminating conversion)
